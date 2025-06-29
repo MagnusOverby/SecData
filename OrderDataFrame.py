@@ -3,8 +3,11 @@ import pandas as pd
 from collections import Counter
 import matplotlib.pyplot as plt
 
-def GetDataFromFiles():
-        base_path = r"D:\code\SEC_Fundamentals"
+# Base directory for CSV files. Override with SEC_FUNDAMENTALS_DIR
+BASE_DIR = os.environ.get('SEC_FUNDAMENTALS_DIR', r'D:\code\SEC_Fundamentals')
+
+def GetDataFromFiles(base_path: str | None = None):
+        base_path = base_path or BASE_DIR
         tickers = [name for name in os.listdir(base_path) if os.path.isdir(os.path.join(base_path, name))]
     
         # Dictionary: {ticker: {'balanceSheet': df, ...}}
@@ -462,29 +465,25 @@ def accounting_checks(df_income):
     print(f"Rows with Net Income mismatch: {mismatch_net.sum()}")
 
 
+
 if __name__=="__main__":
-    
-    data,col_freq = GetDataFromFiles()
-    base_path = r"D:\code\SEC_Fundamentals"
+
+    data, col_freq = GetDataFromFiles(BASE_DIR)
+    base_path = BASE_DIR
     IS = col_freq[0]
 
-   
     mappings = {
         'income': IS_Hard_Mapping(),
         'balance': BS_Hard_Mapping(),
         'cashflow': CS_Hard_Mapping() }
-    
+
     aggregator = SECDataAggregator(base_path, mappings)
     df_income = aggregator.load_and_standardize('income')
     df_balance = aggregator.load_and_standardize("balance")
     df_cash = aggregator.load_and_standardize("cashflow")
-    
-    
-    path = "D:\\code\\SEC_Fundamentals\\summary_statement\\"
-    #==================== PRINT THE DATA FRAMES TO CSV FILES =========================#
-    df_income.to_csv(path+"income_statement.csv")
-    df_balance.to_csv(path+"balance_sheet.csv")
-    df_cash.to_csv(path+"cashflow_statement.csv")
-    
 
-    
+    path = os.path.join(base_path, "summary_statement")
+    #==================== PRINT THE DATA FRAMES TO CSV FILES =====================#
+    df_income.to_csv(os.path.join(path, "income_statement.csv"))
+    df_balance.to_csv(os.path.join(path, "balance_sheet.csv"))
+    df_cash.to_csv(os.path.join(path, "cashflow_statement.csv"))
