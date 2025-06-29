@@ -9,6 +9,11 @@ from edgar.xbrl import *
 import pandas as pd
 from typing import Optional
 import numpy as np
+import os
+
+# Default directory for reading/writing data. Can be overridden by
+# the SEC_FUNDAMENTALS_DIR environment variable.
+BASE_DIR = os.environ.get('SEC_FUNDAMENTALS_DIR', r'D:\code\SEC_Fundamentals')
 
 def get_income_statement_edgartools(ticker, form_type="10-Q"):
     """
@@ -400,16 +405,16 @@ def testRun(ticker):
     return ratios,data
     
 
-def ReadSPXItems():
-    
-    path = "D:\\code\\SEC_Fundamentals\\allTickers.csv"
+def ReadSPXItems(base_dir: str | None = None):
+
+    base_dir = base_dir or BASE_DIR
+    path = os.path.join(base_dir, "allTickers.csv")
     df_ticker = pd.read_csv(path)
     return df_ticker
 
 
 if __name__=="__main__":
-    
-    ticker = ReadSPXItems() 
-    r,d = testRun(ticker["ticker"].iloc[:10])
+
+    ticker = ReadSPXItems(BASE_DIR)
+    r, d = testRun(ticker["ticker"].iloc[:10])
         
-  

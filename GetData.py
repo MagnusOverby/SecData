@@ -24,6 +24,10 @@ from typing import Optional
 import numpy as np
 import os
 
+# Base directory for saved data. Can be overridden with the
+# SEC_FUNDAMENTALS_DIR environment variable.
+BASE_DIR = os.environ.get('SEC_FUNDAMENTALS_DIR', r'D:\code\SEC_Fundamentals')
+
 def saveAccountingData(df_dict,path):
     
     output_dir = f"{path}"
@@ -53,11 +57,12 @@ def GetAccountingDict(filings):
     return data
 
 
-def GetAccountingData(ticker:str,howFarBack):
-    
+def GetAccountingData(ticker: str, howFarBack, base_dir: Optional[str] = None):
+
     c = Company(ticker)
-    base_path = f"D:\\code\\SEC_Fundamentals\\{ticker}\\"
-    
+    base_dir = base_dir or BASE_DIR
+    base_path = os.path.join(base_dir, ticker)
+
     Time_Frame = howFarBack
     
     
@@ -74,9 +79,10 @@ def GetAccountingData(ticker:str,howFarBack):
     
 
 
-def GetAllTickers():
-    
-    path = "D:\\code\\SEC_Fundamentals\\allTickers.csv"
+def GetAllTickers(base_dir: Optional[str] = None):
+
+    base_dir = base_dir or BASE_DIR
+    path = os.path.join(base_dir, "allTickers.csv")
     df_ticker = pd.read_csv(path)
     return df_ticker
 
@@ -84,10 +90,11 @@ def main():
     
     email = "magnus@pagnus.com"
     set_identity(email)
-    tickers = GetAllTickers()
+    base_dir = BASE_DIR
+    tickers = GetAllTickers(base_dir)
     tickers = tickers["ticker"].iloc[:150]
     for ticker in tickers:
-        GetAccountingData(ticker,15)
+        GetAccountingData(ticker, 15, base_dir)
 
 if __name__ == "__main__":
     main()

@@ -5,13 +5,16 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from sec_edgar_downloader import Downloader
 
+# Directory where sample data lives. Configurable via SEC_FUNDAMENTALS_DIR.
+BASE_DIR = os.environ.get("SEC_FUNDAMENTALS_DIR", r"D:\code\SEC_Fundamentals")
+
 # Install requirements:
 # pip install sec-edgar-downloader beautifulsoup4 lxml pandas python-xbrl
 
 # Configure your SEC-compliant User-Agent info here:
 COMPANY_NAME = "Your Company or App Name"
 EMAIL_ADDRESS = "your.email@domain.com"
-addl = "D:\\code\\SEC_Fundamentals\\" # Not a good solution. fix it...
+addl = os.path.join(BASE_DIR, "")  # Not a good solution. fix it...
 
 
 def download_10q_filings(ticker, num_filings=4, download_dir="edgar_data"):
