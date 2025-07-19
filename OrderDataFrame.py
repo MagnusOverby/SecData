@@ -1,10 +1,11 @@
 import os
 import pandas as pd
 from collections import Counter
+import numpy as np
 import matplotlib.pyplot as plt
 
 # Base directory for CSV files. Override with SEC_FUNDAMENTALS_DIR
-BASE_DIR = os.environ.get('SEC_FUNDAMENTALS_DIR', r'D:\code\SEC_Fundamentals')
+BASE_DIR = os.environ.get('SEC_FUNDAMENTALS_DIR', r'D:\code\SEC\SecData')
 
 def GetDataFromFiles(base_path: str | None = None):
         base_path = base_path or BASE_DIR
@@ -50,11 +51,11 @@ def fuzzy_map_col(col, reverse_map):
     # 2. Try fuzzy/substring match basically we are checking, if either the first 8 are the same or if 70% matches, which ever is longer.
     for alias, std_key in reverse_map.items():
         # Require at least 70% of alias length as a prefix match (tweakable)
-        if col_lower.startswith(alias[:max(8, int(len(alias)*percent_match))]):
+        if col_lower.startswith(alias[:max(10, int(len(alias)*percent_match))]):
             return std_key
         if alias in col_lower:
             return std_key
-    return "Other"  # If no match, keep original
+    return "other"  # if no match we need to return other.
     
 def ReverseMap(statementMap):
     reverse_map = {}
@@ -81,7 +82,8 @@ def IS_Hard_Mapping():
         "Cost of sales", 
         "Cost of goods sold", 
         "Cost of products sold",
-        "Cost of sales, exclusive of depreciation and amortization"
+        "Cost of sales, exclusive of depreciation and amortization",
+        "Total operating expenses"
     ],
     "GrossProfit": [
         "Gross profit", 
@@ -166,6 +168,35 @@ def IS_Hard_Mapping():
         "Diluted (in shares)", 
         "Weighted-average diluted shares outstanding (in shares)"
     ],
+    "DepreciationAmortization": [
+            "Depreciation and amortization",
+            "Depreciation, depletion and amortization",
+            "Depreciation",
+            "Amortization of intangible assets"
+        ],
+        "NonRecurringItems": [
+            "Restructuring charges",
+            "Asset impairment charges",
+            "Gain (loss) on disposal of assets",
+            "Other income (expense), net"
+        ],
+        "TaxBenefit": [
+            "Income tax benefit",
+            "Benefit from income taxes"
+        ],
+        "MinorityInterest": [
+            "Net income attributable to noncontrolling interests",
+            "Minority interest in net income"
+        ],
+        # Handle negative values properly
+        "TaxExpenseCredit": [  # More comprehensive than just expense
+            "Income tax expense",
+            "Provision for income taxes",
+            "Provision for (benefit from) income taxes",
+            "Income tax provision",
+            "Income tax benefit",
+            "Benefit from income taxes"
+        ]
     # Add more as you need for your KPIs
 }
     return INCOME_STATEMENT_HEADER_MAP
@@ -259,7 +290,30 @@ def BS_Hard_Mapping():
     ],
     "TotalLiabilitiesAndEquity": [
         "Total liabilities and stockholders’ equity", "Total liabilities and shareholders’ equity", "Total liabilities and equity"
-    ]}
+    ],
+    "LongTermInvestments": [
+            "Long-term investments",
+            "Investments in equity method investees",
+            "Available-for-sale securities, noncurrent"
+        ],
+        "DeferredTaxAssetsNoncurrent": [
+            "Deferred tax assets, noncurrent",
+            "Deferred income tax assets"
+        ],
+        "NoncontrollingInterest": [
+            "Noncontrolling interests",
+            "Minority interest"
+        ],
+        "PreferredStock": [
+            "Preferred stock",
+            "Preferred shares"
+        ],
+        "ShareBasedCompensation": [
+            "Share-based compensation",
+            "Stock compensation"
+        ]
+    
+    }
     return balance_sheet_mapping
 
 def CS_Hard_Mapping():
@@ -379,10 +433,8 @@ class SECDataAggregator:
     
     def _standardize_columns(self, df, mapping):
         
-        
         df = df.iloc[1:,:].copy()
         reverse_map = ReverseMap(mapping)
-        
         all_col = list([x.lower() for x in df.columns])
         if all_col[0] =="unnamed: 0":
             all_col[0] = "date"
@@ -396,6 +448,53 @@ class SECDataAggregator:
         adj_cols = list(new_cols)
         df.columns = adj_cols
        
+        return df
+    
+    def standardize_date_column(self, df):
+        """Standardize date formats commonly found in SEC filings"""
+        if 'date' in df.columns:
+            
+            df['date'] = pd.to_datetime(df['date'], errors='coerce')
+        return df
+    
+    
+    def clean_numeric_data(self, df):
+        """Clean numeric columns to handle SEC formatting quirks"""
+        
+        cols = df.shape[1]
+        
+        
+        
+        for i in range(0,cols):
+            
+            
+            col = df.columns[i]
+            
+            if col != 'date' and col != 'ticker':
+                # Remove parentheses and convert to negative
+                df.iloc[:,i] = df.iloc[:,i].astype(str).str.replace(r'\((.*?)\)', r'-\1', regex=True)
+                # Remove commas and dollar signs
+                df.iloc[:,i] = df.iloc[:,i].str.replace(',', '').str.replace('$', '').str.replace('—', '0')
+                # Convert to numeric
+                df.iloc[:,i] = pd.to_numeric(df.iloc[:,i], errors='coerce')
+        return df
+    
+    
+    def detect_and_apply_scale(self, df, ticker):
+        """Detect if numbers are in thousands/millions and normalize to actual values"""
+        # This would require reading the scale information from the original filing
+        # For now, implement a heuristic based on magnitude
+        numeric_cols = df.select_dtypes(include=[np.number]).columns
+    
+        for col in numeric_cols:
+            if col not in ['date', 'ticker']:
+                median_val = df[col].median()
+                if median_val > 0:
+                    if median_val < 1000000:  # Likely in thousands
+                        df[col] = df[col] * 1000
+                    elif median_val > 1000000000:  # Likely in millions already
+                        df[col] = df[col] * 1000000
+        
         return df
     
 
@@ -419,11 +518,31 @@ class SECDataAggregator:
             fpath = os.path.join(self.base_path, ticker, file_name)
             if os.path.exists(fpath):
                 df = pd.read_csv(fpath)
+                
+                #Some side bar stuff to get the date columns  there
+                cols = list(df.columns)
+                cols[0] = "date"
+                df.columns = [x.lower() for x in cols]
+                
+                df = df.iloc[1:,:]
+                
+                df = self.clean_numeric_data(df)
+                
                 df_t = self._standardize_columns(df, mapping)
+                
                 df_t = df_t.set_index("date")
+                
                 df_t = df_t.T.groupby(level=0).sum().T
+                
                 df_t =df_t.reset_index()
+                
+                #df_t = self.standardize_date_column(df)
+                
+                #
+                
                 df_t['ticker'] = ticker
+                df_t = self.detect_and_apply_scale(df_t,ticker)
+                df_t = self.standardize_date_column(df_t)
                 data.append(df_t)
         if data:
             result = pd.concat(data, ignore_index=True,axis=0,join="outer")

@@ -26,7 +26,7 @@ import os
 
 # Base directory for saved data. Can be overridden with the
 # SEC_FUNDAMENTALS_DIR environment variable.
-BASE_DIR = os.environ.get('SEC_FUNDAMENTALS_DIR', r'D:\code\SEC_Fundamentals')
+BASE_DIR = os.environ.get('SEC_FUNDAMENTALS_DIR', r"D:\code\SEC\SecData")
 
 def saveAccountingData(df_dict,path):
     
@@ -92,9 +92,13 @@ def main():
     set_identity(email)
     base_dir = BASE_DIR
     tickers = GetAllTickers(base_dir)
-    tickers = tickers["ticker"].iloc[:150]
-    for ticker in tickers:
-        GetAccountingData(ticker, 15, base_dir)
+    tickers = tickers["ticker"]
+    for ticker in tickers[150:500]:
+        
+        try:
+            GetAccountingData(ticker, 15, base_dir)
+        except:
+            print(f"Error fetching {ticker}")
 
 if __name__ == "__main__":
     main()
