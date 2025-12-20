@@ -3,9 +3,9 @@ import pandas as pd
 from collections import Counter
 import numpy as np
 import matplotlib.pyplot as plt
-
+import yfinance as yf
 # Base directory for CSV files. Override with SEC_FUNDAMENTALS_DIR
-BASE_DIR = os.environ.get('SEC_FUNDAMENTALS_DIR', r'D:\code\SEC\SecData')
+BASE_DIR = os.environ.get('SEC_FUNDAMENTALS_DIR',  r"D:\code\SEC_Fundamentals")
 
 def GetDataFromFiles(base_path: str | None = None):
         base_path = base_path or BASE_DIR
@@ -428,8 +428,18 @@ class SECDataAggregator:
         self.balance_sheets = None
         self.income_statements = None
         self.cash_flow_statements = None
+        self.sector_mapping = None
+        self._load_sector_mapping()
         
     
+    def _load_sector_mapping(self):
+        
+        df = pd.read_csv(self.base_path+"\\sector_map.csv")
+        df = df.set_index("ticker")
+        df = df["sector"]
+        self.sector_mapping = df.to_dict()
+        
+        
     
     def _standardize_columns(self, df, mapping):
         
@@ -497,6 +507,13 @@ class SECDataAggregator:
         
         return df
     
+    
+    
+    def get_sector_from_ticker(self,ticker):
+        try:
+            return self.sector_mapping[ticker]
+        except:
+            return "N/A"
 
     def load_and_standardize(self, statement: str):
         """
@@ -507,31 +524,33 @@ class SECDataAggregator:
         data = []
         mapping = self.mappings[statement]
         tickers = [name for name in os.listdir(self.base_path) if os.path.isdir(os.path.join(self.base_path, name))]
+        # Changed file mappings so that my new gatherer works better.
         file_name_map = {
-            "income": "IncomeStatement.csv",
-            "balance": "balanceSheet.csv",
-            "cashflow": "cashflowStatement.csv"
+            "income": "IS.csv",
+            "balance": "BS.csv",
+            "cashflow": "CF.csv"
         }
+        
         file_name = file_name_map[statement]
     
         for ticker in tickers:
             fpath = os.path.join(self.base_path, ticker, file_name)
             if os.path.exists(fpath):
-                df = pd.read_csv(fpath)
+                df = (pd.read_csv(fpath)
+                      .pipe(lambda d: d.loc[:, ~d.columns.duplicated()])
+                      .assign(filing_date=lambda d: pd.to_datetime(d["filing_date"]))
+                      .set_index("filing_date"))
+                df = df[~df.index.duplicated(keep="last")]
                 
                 #Some side bar stuff to get the date columns  there
                 cols = list(df.columns)
-                cols[0] = "date"
+                cols[0] = "filing_date"
                 df.columns = [x.lower() for x in cols]
-                
-                df = df.iloc[1:,:]
                 
                 df = self.clean_numeric_data(df)
                 
                 df_t = self._standardize_columns(df, mapping)
-                
-                df_t = df_t.set_index("date")
-                
+                 
                 df_t = df_t.T.groupby(level=0).sum().T
                 
                 df_t =df_t.reset_index()
@@ -543,6 +562,7 @@ class SECDataAggregator:
                 df_t['ticker'] = ticker
                 df_t = self.detect_and_apply_scale(df_t,ticker)
                 df_t = self.standardize_date_column(df_t)
+                df_t["sector"] = self.get_sector_from_ticker(ticker)
                 data.append(df_t)
         if data:
             result = pd.concat(data, ignore_index=True,axis=0,join="outer")
